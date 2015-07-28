@@ -1,40 +1,53 @@
 package org.tbadg.memory;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
+import android.preference.PreferenceManager;
 import android.util.Log;
 
 import java.io.IOException;
 
 public class Music {
 
-    public void play(Context context, int resourceId) {
-        Uri uri = new Uri.Builder()
-                .scheme("android.resource")
-                .authority(context.getPackageName())
-                .path(String.valueOf(resourceId))
-                .build();
-        play(context, uri);
+    private final String TAG = Music.class.getSimpleName();
+
+    public Music(Context context) {
+        mContext = context;
     }
 
-    public void play(Context context, Uri musicUri) {
+    public void play(int resourceId) {
+        Uri uri = new Uri.Builder()
+                .scheme("android.resource")
+                .authority(mContext.getPackageName())
+                .path(String.valueOf(resourceId))
+                .build();
+        play(uri);
+    }
+
+    public void play(Uri musicUri) {
+        mMusicUri = musicUri;
+        mSeekToPosition = 0;
+        play();
+    }
+
+    public void play() {
         reset();
 
+        // The member variable isn't set until mOnPreparedListener is called
         MediaPlayer mediaPlayer = new MediaPlayer();
         try {
-            final float volumeLevel = currentVolumeLevel(context) * 0.15f;
-            mediaPlayer.setVolume(volumeLevel, volumeLevel);
             mediaPlayer.setOnPreparedListener(mOnPreparedListener);
             mediaPlayer.setOnErrorListener(mOnErrorListener);
             mediaPlayer.setOnCompletionListener(mOnCompletionListener);
             mediaPlayer.setAudioStreamType(AudioManager.STREAM_MUSIC);
-            mediaPlayer.setDataSource(context, musicUri);
+            mediaPlayer.setDataSource(mContext, mMusicUri);
             mediaPlayer.setLooping(true);
             mediaPlayer.prepareAsync();
         } catch (IOException | IllegalArgumentException | SecurityException e) {
-            Log.e("Music", "Failed to open the darn music uri", e);
+            Log.e(TAG, "Failed to open the darn music uri", e);
         }
     }
 
@@ -44,18 +57,34 @@ public class Music {
     }
 
     public void resume() {
-        if (mMediaPlayer == null) {
-            return;
-        }
-
         try {
-            mMediaPlayer.start();
+            if (mMediaPlayer != null) {
+                mMediaPlayer.start();
+                setVolumeFromPreferences();
+                return;
+            }
+            if (mMusicUri != null) {
+                play();
+            }
         } catch (Exception ignored) {
         }
     }
 
     public void stop() {
+        if (mMediaPlayer != null) {
+            mSeekToPosition = mMediaPlayer.getCurrentPosition();
+        }
         reset();
+    }
+
+    private void setVolumeFromPreferences() {
+        if (mMediaPlayer == null)
+            return;
+
+        SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(mContext);
+        int volume = sharedPreferences.getInt("prefMusicVolume", 15);
+        float volumeLevel = currentVolumeLevel(mContext) * volume / 100.0f;
+        mMediaPlayer.setVolume(volumeLevel, volumeLevel);
     }
 
     public static boolean isResourceLoadingFinished() {
@@ -66,7 +95,10 @@ public class Music {
      * Implementation below
      */
 
+    private final Context mContext;
     private MediaPlayer mMediaPlayer;
+    private Uri mMusicUri;
+    private int mSeekToPosition;
     private static boolean resourceLoadingFinished = true;
 
 
@@ -87,7 +119,13 @@ public class Music {
     private MediaPlayer.OnPreparedListener mOnPreparedListener = new MediaPlayer.OnPreparedListener() {
         @Override
         public void onPrepared(MediaPlayer mp) {
+            if (mSeekToPosition != 0) {
+                mp.seekTo(mSeekToPosition);
+                mSeekToPosition = 0;
+            }
+
             mMediaPlayer = mp;
+            setVolumeFromPreferences();
             mp.start();
         }
     };

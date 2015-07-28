@@ -50,8 +50,8 @@ public class MemoryActivity extends Activity implements TextView.OnEditorActionL
         setVolumeControlStream(SoundsEffects.AUDIO_STREAM_TYPE);
         mSoundsEffects = new SoundsEffects(this);
 
-        mMusic = new Music();
-        mMusic.play(this, R.raw.music);
+        mMusic = new Music(this);
+        mMusic.play(R.raw.music);
 
         // Clicking the popup or newGame buttons starts a new game:
         mPopupBtn = (Button) findViewById(R.id.popup);
